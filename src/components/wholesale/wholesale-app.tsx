@@ -1,13 +1,20 @@
 
-import { useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import {
   Activity,
   Archive,
   BarChart3,
   Boxes,
+  Bot,
   Building2,
+  CalendarClock,
   ClipboardList,
+  CreditCard,
+  Factory,
+  History,
+  Plug,
+  RotateCcw,
   FileText,
   LayoutDashboard,
   Package,
@@ -29,28 +36,46 @@ import { PharmacyOtpAlerts, PharmacyOtpBell } from "./pharmacy-otp-notifications
 import { ArchiveView } from "./archive-view"
 import { demoArchiveOrders, demoDeliveryAgents, demoInvoices, demoOrders, demoPharmacies, demoProducts } from "./demo-data"
 import { formatCurrency } from "./shared"
+import { toast } from "sonner"
+import { ActivityView } from "./activity-view"
+import { AssistantView } from "./assistant-view"
+import { CreditView } from "./credit-view"
+import { ExpiryView, type BatchAction } from "./expiry-view"
+import { IntegrationsView } from "./integrations-view"
+import { NotificationCenter, buildNotifications, type AppNotification } from "./notifications-center"
+import { ReturnsView, type NewReturn } from "./returns-view"
+import { SuppliersView, expectedDate, type NewPurchaseOrder } from "./suppliers-view"
+import { DEMO_NOW, createDemoBatches, demoActivity, demoActorNames, demoCreditProfiles, demoIntegrations, demoPurchaseOrders, demoReturns, demoSuppliers, restockableReasons, type ActivityEntry, type Batch, type CreditProfile, type Integration, type PurchaseOrder, type ReturnRequest, type Supplier } from "./ops-data"
+import { applyCreditNote, returnAmount } from "./ops-logic"
 import type { CartLine, CheckoutDetails, DeliveryStatus, Invoice, Order, Pharmacy, Product } from "./types"
 
 export type DemoRole = "owner" | "inventory" | "orders" | "dispatcher" | "driver" | "pharmacy"
-type Tab = "overview" | "archive" | "orders" | "inventory" | "pharmacies" | "deliveries" | "invoices" | "reports" | "team" | "branches" | "offers" | "settings" | "home" | "catalog" | "cart" | "account"
+type Tab = "overview" | "archive" | "orders" | "inventory" | "pharmacies" | "deliveries" | "invoices" | "reports" | "team" | "branches" | "offers" | "settings" | "expiry" | "returns" | "suppliers" | "credit" | "integrations" | "activity" | "assistant" | "home" | "catalog" | "cart" | "account"
 type InitialRole = "company" | "driver" | "pharmacy"
 type Props = { initialRole: InitialRole; initialDemoRole?: DemoRole; startTour?: boolean | undefined }
 
-type NavItem = { id: Tab; label: string; icon: LucideIcon; badge?: string }
+type NavItem = { id: Tab; label: string; icon: LucideIcon; badge?: string; group?: string }
 
 const companyNavigation: NavItem[] = [
-  { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
-  { id: "orders", label: "الطلبات", icon: ClipboardList },
-  { id: "inventory", label: "المخزون", icon: Boxes },
-  { id: "pharmacies", label: "الصيدليات", icon: Store },
-  { id: "deliveries", label: "التوصيل", icon: Truck },
-  { id: "invoices", label: "الفواتير والتحصيل", icon: FileText },
-  { id: "reports", label: "التقارير", icon: BarChart3 },
-  { id: "archive", label: "الأرشيف", icon: Archive, badge: "جديد" },
-  { id: "team", label: "الفريق والصلاحيات", icon: Users },
-  { id: "branches", label: "الفروع والتغطية", icon: Building2, badge: "جديد" },
-  { id: "offers", label: "العروض التجارية", icon: Tag, badge: "جديد" },
-  { id: "settings", label: "إعدادات الشركة", icon: Settings },
+  { id: "overview", label: "نظرة عامة", icon: LayoutDashboard, group: "التشغيل" },
+  { id: "orders", label: "الطلبات", icon: ClipboardList, group: "التشغيل" },
+  { id: "inventory", label: "المخزون", icon: Boxes, group: "التشغيل" },
+  { id: "expiry", label: "الصلاحية والتشغيلات", icon: CalendarClock, badge: "جديد", group: "التشغيل" },
+  { id: "suppliers", label: "الموردون والمشتريات", icon: Factory, badge: "جديد", group: "التشغيل" },
+  { id: "deliveries", label: "التوصيل", icon: Truck, group: "التشغيل" },
+  { id: "returns", label: "المرتجعات", icon: RotateCcw, badge: "جديد", group: "التشغيل" },
+  { id: "pharmacies", label: "الصيدليات", icon: Store, group: "العملاء والمالية" },
+  { id: "invoices", label: "الفواتير والتحصيل", icon: FileText, group: "العملاء والمالية" },
+  { id: "credit", label: "الحدود الائتمانية", icon: CreditCard, badge: "جديد", group: "العملاء والمالية" },
+  { id: "offers", label: "العروض التجارية", icon: Tag, group: "العملاء والمالية" },
+  { id: "reports", label: "التقارير", icon: BarChart3, group: "التحليل" },
+  { id: "assistant", label: "المساعد الذكي", icon: Bot, badge: "جديد", group: "التحليل" },
+  { id: "archive", label: "الأرشيف", icon: Archive, group: "التحليل" },
+  { id: "activity", label: "سجل النشاط", icon: History, group: "التحليل" },
+  { id: "team", label: "الفريق والصلاحيات", icon: Users, group: "الإدارة" },
+  { id: "branches", label: "الفروع والتغطية", icon: Building2, group: "الإدارة" },
+  { id: "integrations", label: "التكاملات", icon: Plug, badge: "جديد", group: "الإدارة" },
+  { id: "settings", label: "إعدادات الشركة", icon: Settings, group: "الإدارة" },
 ]
 
 const pharmacyNavigation: NavItem[] = [
@@ -63,9 +88,9 @@ const pharmacyNavigation: NavItem[] = [
 ]
 
 const roleNavigation: Record<DemoRole, Tab[]> = {
-  owner: ["overview", "orders", "inventory", "pharmacies", "deliveries", "invoices", "reports", "archive", "team", "branches", "offers", "settings"],
-  inventory: ["overview", "inventory", "branches"],
-  orders: ["overview", "orders", "pharmacies", "invoices", "reports", "archive"],
+  owner: companyNavigation.map((item) => item.id),
+  inventory: ["overview", "inventory", "expiry", "suppliers", "returns", "assistant", "branches"],
+  orders: ["overview", "orders", "returns", "pharmacies", "invoices", "credit", "reports", "assistant", "archive"],
   dispatcher: ["overview", "orders", "deliveries", "branches"],
   driver: ["deliveries"],
   pharmacy: ["home", "catalog", "cart", "orders", "invoices", "account"],
@@ -89,10 +114,17 @@ const pageCopy: Record<Tab, { title: string; subtitle: string }> = {
   invoices: { title: "الفواتير والتحصيل", subtitle: "متابعة الفواتير والمبالغ المستحقة" },
   reports: { title: "التقارير والتحليلات", subtitle: "قراءة سريعة لحركة المبيعات والتشغيل" },
   archive: { title: "الأرشيف", subtitle: "أرشيف متكامل لفواتير البضائع وسندات التسليم لكل صيدلية" },
-  team: { title: "الفريق والصلاحيات", subtitle: "استعراض الأدوار المقترحة داخل الشركة" },
-  branches: { title: "الفروع والتغطية", subtitle: "نظرة على شبكة التوزيع المقترحة" },
-  offers: { title: "العروض التجارية", subtitle: "حملات وأفكار لتنمية المبيعات" },
+  team: { title: "الفريق والصلاحيات", subtitle: "أعضاء الفريق وصلاحيات كل دور" },
+  branches: { title: "الفروع والتغطية", subtitle: "مواقع التوزيع والمندوبون ومناطق التغطية" },
+  offers: { title: "العروض التجارية", subtitle: "حملات الخصم وأداؤها لدى الصيدليات" },
   settings: { title: "إعدادات الشركة", subtitle: "تفضيلات مساحة العمل وبياناتها" },
+  expiry: { title: "الصلاحية والتشغيلات", subtitle: "تنبيهات قبل 90 و60 و30 يومًا لكل تشغيلة" },
+  returns: { title: "المرتجعات", subtitle: "طلبات الإرجاع وأثرها على المخزون والفواتير" },
+  suppliers: { title: "الموردون وأوامر الشراء", subtitle: "إعادة الطلب واستلام البضاعة من الموردين" },
+  credit: { title: "الحدود الائتمانية والتحصيل", subtitle: "أعمار الديون وتذكيرات السداد لكل صيدلية" },
+  integrations: { title: "التكاملات", subtitle: "الربط مع الخدمات الحكومية والتواصل والمحاسبة" },
+  activity: { title: "سجل النشاط", subtitle: "من غيّر ماذا ومتى داخل مساحة الشركة" },
+  assistant: { title: "المساعد الذكي", subtitle: "اقتراحات مبنية على بيانات الطلبات والمخزون" },
   home: { title: "الرئيسية", subtitle: "ملخص حساب الصيدلية" },
   catalog: { title: "كتالوج المنتجات", subtitle: "تصفح المنتجات وأضف احتياجاتك إلى السلة" },
   cart: { title: "سلة الطلبات", subtitle: "راجع الأصناف وتفاصيل التسليم قبل الإرسال" },
@@ -112,6 +144,14 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
   const [driverName, setDriverName] = useState(demoDeliveryAgents[0]!.name)
   const [catalogQuery, setCatalogQuery] = useState("")
   const [feedback, setFeedback] = useState("")
+  const [batches, setBatches] = useState<Batch[]>(() => createDemoBatches())
+  const [returns, setReturns] = useState<ReturnRequest[]>(() => demoReturns.map((item) => ({ ...item })))
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => demoSuppliers.map((item) => ({ ...item })))
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => demoPurchaseOrders.map((po) => ({ ...po, lines: po.lines.map((line) => ({ ...line })) })))
+  const [creditProfiles, setCreditProfiles] = useState<CreditProfile[]>(() => demoCreditProfiles.map((item) => ({ ...item })))
+  const [integrations, setIntegrations] = useState<Integration[]>(() => demoIntegrations.map((item) => ({ ...item })))
+  const [activity, setActivity] = useState<ActivityEntry[]>(() => demoActivity.map((item) => ({ ...item })))
+  const [readNotifications, setReadNotifications] = useState<string[]>([])
 
   const isCompany = !["driver", "pharmacy"].includes(activeRole)
   const isPharmacy = activeRole === "pharmacy"
@@ -126,6 +166,20 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
   const currentDriverId = demoDeliveryAgents.find((agent) => agent.name === driverName)?.id
   const cartCount = cart.reduce((total, line) => total + line.quantity, 0)
   const outstandingBalance = pharmacyInvoices.reduce((total, invoice) => total + Math.max(invoice.total - invoice.paidAmount, 0), 0)
+  const allOrders = useMemo(() => [...orders, ...demoArchiveOrders], [orders])
+  const notifications = useMemo(() => isCompany
+    ? buildNotifications({ products, orders, allOrders, batches, returns }).filter((item) => roleNavigation[activeRole].includes(item.tab))
+    : [], [isCompany, products, orders, allOrders, batches, returns, activeRole])
+  const actorName = activeRole === "driver" ? driverName : demoActorNames[activeRole]
+
+  function log(section: string, action: string) {
+    setActivity((current) => [{ id: `ACT-${Date.now()}-${current.length}`, at: new Date().toISOString(), actor: actorName, role: roleLabels[activeRole], section, action }, ...current])
+  }
+
+  function act(section: string, action: string, message = action) {
+    log(section, action)
+    toast.success(message)
+  }
 
   function notify(message: string) {
     setFeedback(message)
@@ -189,6 +243,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     setCart([])
     setTab("orders")
     notify(`تم إنشاء الطلب التجريبي ${order.id}. لن يُحفظ بعد مغادرة العرض.`)
+    log("الطلبات", `إنشاء طلب ${order.id} بقيمة ${formatCurrency(order.total)}`)
   }
 
   function reorderOrder(orderId: string) {
@@ -208,6 +263,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       return reserved ? { ...product, reserved: Math.max(0, product.reserved - reserved) } : product
     }))
     notify(`تم إلغاء ${orderId} في العرض التجريبي.`)
+    log("الطلبات", `إلغاء الطلب ${orderId} من الصيدلية`)
   }
 
   function updateOrder(order: Order) {
@@ -226,6 +282,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     if (!nextStatus) return
     setOrders((current) => current.map((item) => item.id === orderId ? { ...item, orderStatus: nextStatus } : item))
     notify(`تم تحديث الطلب ${orderId} داخل العرض التجريبي.`)
+    log("الطلبات", `نقل الطلب ${orderId} إلى مرحلة "${nextStatus === "accepted" ? "مقبول" : nextStatus === "preparing" ? "قيد التجهيز" : "جاهز للتوصيل"}"`)
   }
 
   function rejectOrder(orderId: string) {
@@ -237,6 +294,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       return reserved ? { ...product, reserved: Math.max(0, product.reserved - reserved) } : product
     }))
     notify(`تم رفض ${orderId} داخل العرض التجريبي.`)
+    log("الطلبات", `رفض الطلب ${orderId}`)
   }
 
   function assignDelivery(orderId: string, agentId: string) {
@@ -246,11 +304,13 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     const invoiceId = order.invoiceId ?? `INV-${order.id.replace("ORD-", "")}`
     updateOrder({ ...order, orderStatus: "out_for_delivery", deliveryStatus: "assigned", assignedTo: agent.id, invoiceId })
     notify(`تم إسناد ${orderId} إلى ${agent.name} في العرض التجريبي.`)
+    log("التوصيل", `إسناد الطلب ${orderId} إلى ${agent.name}`)
   }
 
   function restock(productId: string, quantity: number) {
     setProducts((current) => current.map((product) => product.id === productId ? { ...product, stock: product.stock + quantity } : product))
     notify(`تمت إضافة ${quantity.toLocaleString("ar-SA")} وحدة إلى المخزون التجريبي؛ لن تُحفظ التغييرات.`)
+    log("المخزون", `إضافة ${quantity.toLocaleString("ar-SA")} وحدة إلى ${products.find((product) => product.id === productId)?.name ?? productId}`)
   }
 
   function saveProduct(product: Product) {
@@ -258,9 +318,12 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       ? current.map((item) => item.id === product.id ? product : item)
       : [product, ...current])
     notify(`تم تحديث ${product.name} في بيانات العرض التجريبي.`)
+    log("المخزون", `حفظ بيانات الصنف ${product.name}`)
   }
 
   function togglePharmacy(pharmacyId: string) {
+    const target = pharmacies.find((pharmacy) => pharmacy.id === pharmacyId)
+    if (target) log("الصيدليات", `${target.status === "approved" ? "إيقاف" : target.status === "pending" ? "اعتماد" : "إعادة تفعيل"} ${target.name}`)
     setPharmacies((current) => current.map((pharmacy) => pharmacy.id === pharmacyId
       ? { ...pharmacy, status: pharmacy.status === "approved" ? "suspended" : "approved" }
       : pharmacy))
@@ -293,6 +356,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       return delivered ? { ...product, stock: Math.max(0, product.stock - delivered), reserved: Math.max(0, product.reserved - delivered) } : product
     }))
     notify(`تم تسجيل تسليم ${orderId} تجريبيًا وتحديث التحصيل.`)
+    log("التوصيل", `تسليم ${orderId} إلى ${recipient} وتحصيل ${formatCurrency(Math.max(0, collectedAmount))}`)
   }
 
   function failDelivery(orderId: string, reason: string, note: string) {
@@ -300,20 +364,109 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       ? { ...order, deliveryStatus: "failed", orderStatus: "ready", rejectionReason: note ? `${reason} — ${note}` : reason }
       : order))
     notify(`تم تسجيل تعذر تسليم ${orderId} في العرض التجريبي.`)
+    log("التوصيل", `تعذر تسليم ${orderId}: ${reason}`)
+  }
+
+  function addPharmacy(pharmacy: Pharmacy) {
+    setPharmacies((current) => [pharmacy, ...current])
+    setCreditProfiles((current) => [...current, { pharmacyId: pharmacy.id, limit: 1500, termsDays: 30, frozen: false }])
+    act("الصيدليات", `إضافة ${pharmacy.name}${pharmacy.status === "approved" ? " واعتمادها" : " بانتظار الاعتماد"}`, `تمت إضافة ${pharmacy.name}`)
+  }
+
+  function batchAction(batchId: string, action: BatchAction, note: string) {
+    const batch = batches.find((item) => item.id === batchId)
+    if (!batch) return
+    const product = products.find((item) => item.id === batch.productId)
+    setBatches((current) => current.map((item) => item.id === batchId ? { ...item, status: action } : item))
+    if (action !== "discounted") setProducts((current) => current.map((item) => item.id === batch.productId ? { ...item, stock: Math.max(item.reserved, item.stock - batch.quantity) } : item))
+    const verb = action === "discounted" ? "عرض بخصم" : action === "returned" ? "إرجاع للمورد" : "إتلاف"
+    act("الصلاحية والتشغيلات", `${verb} للتشغيلة ${batch.batchNo} من ${product?.name ?? batch.productId} (${batch.quantity} عبوة)${note ? ` · ${note}` : ""}`, `تم ${verb} للتشغيلة ${batch.batchNo}`)
+  }
+
+  function decideReturn(id: string, decision: "approved" | "rejected", note: string) {
+    const request = returns.find((item) => item.id === id)
+    if (!request || request.status !== "pending") return
+    setReturns((current) => current.map((item) => item.id === id ? { ...item, status: decision, decidedAt: new Date().toISOString(), decisionNote: note || (decision === "approved" ? "تم القبول" : "تم الرفض") } : item))
+    if (decision === "approved") {
+      if (restockableReasons.includes(request.reason)) setProducts((current) => current.map((product) => product.id === request.productId ? { ...product, stock: product.stock + request.quantity } : product))
+      const amount = returnAmount(request.quantity, request.unitPrice)
+      if (request.invoiceId) setInvoices((current) => current.map((invoice) => invoice.id === request.invoiceId ? applyCreditNote(invoice, amount) : invoice))
+      act("المرتجعات", `قبول المرتجع ${id} وإصدار إشعار دائن بقيمة ${formatCurrency(amount)}`, `تم قبول ${id}`)
+    } else act("المرتجعات", `رفض المرتجع ${id}${note ? `: ${note}` : ""}`, `تم رفض ${id}`)
+  }
+
+  function createReturn(request: NewReturn) {
+    const next = Math.max(100, ...returns.map((item) => Number(item.id.replace("RET-", "")) || 0)) + 1
+    setReturns((current) => [{ ...request, id: `RET-${next}`, requestedAt: new Date().toISOString(), status: "pending" }, ...current])
+    act("المرتجعات", `تسجيل مرتجع RET-${next} من ${request.pharmacy}`, `تم تسجيل المرتجع RET-${next}`)
+  }
+
+  function createPurchaseOrders(list: NewPurchaseOrder[]) {
+    let next = Math.max(3000, ...purchaseOrders.map((po) => Number(po.id.replace("PO-", "")) || 0))
+    const created: PurchaseOrder[] = list.map((po) => ({ id: `PO-${++next}`, supplierId: po.supplierId, lines: po.lines, status: "sent", createdAt: new Date().toISOString(), expectedAt: expectedDate(suppliers.find((supplier) => supplier.id === po.supplierId)) }))
+    setPurchaseOrders((current) => [...created, ...current])
+    act("الموردون", `إرسال ${created.map((po) => po.id).join("، ")} إلى ${created.map((po) => suppliers.find((supplier) => supplier.id === po.supplierId)?.name).join("، ")}`, created.length > 1 ? `تم إنشاء ${created.length} أوامر شراء` : `تم إنشاء ${created[0]?.id ?? "أمر الشراء"}`)
+  }
+
+  function receivePurchaseOrder(poId: string, received: Record<string, number>) {
+    const po = purchaseOrders.find((item) => item.id === poId)
+    if (!po || po.status !== "sent") return
+    setPurchaseOrders((current) => current.map((item) => item.id === poId ? { ...item, status: "received", receivedAt: new Date().toISOString(), lines: item.lines.map((line) => ({ ...line, received: received[line.productId] ?? 0 })) } : item))
+    setProducts((current) => current.map((product) => received[product.id] ? { ...product, stock: product.stock + (received[product.id] ?? 0) } : product))
+    const expiry = new Date(DEMO_NOW.getTime() + 540 * 86_400_000).toISOString().slice(0, 10)
+    setBatches((current) => [...po.lines.filter((line) => (received[line.productId] ?? 0) > 0).map((line) => ({ id: `BT-${poId}-${line.productId}`, productId: line.productId, batchNo: `${poId.replace("PO-", "LT")}-${line.productId.slice(-3)}`, expiry, quantity: received[line.productId] ?? 0, location: "المستودع الرئيسي · منطقة الاستلام", status: "active" as const })), ...current])
+    const units = Object.values(received).reduce((sum, value) => sum + value, 0)
+    act("الموردون", `استلام ${poId}: ${units.toLocaleString("ar-SA")} عبوة أُضيفت للمخزون`, `تم استلام ${poId} وإضافة ${units.toLocaleString("ar-SA")} عبوة`)
+  }
+
+  function addSupplier(supplier: Supplier) {
+    setSuppliers((current) => [...current, supplier])
+    act("الموردون", `إضافة المورد ${supplier.name}`, `تمت إضافة ${supplier.name}`)
+  }
+
+  function updateCredit(pharmacyId: string, changes: Partial<CreditProfile>) {
+    setCreditProfiles((current) => current.some((item) => item.pharmacyId === pharmacyId) ? current.map((item) => item.pharmacyId === pharmacyId ? { ...item, ...changes } : item) : [...current, { pharmacyId, limit: 1500, termsDays: 30, frozen: false, ...changes }])
+    const name = pharmacies.find((pharmacy) => pharmacy.id === pharmacyId)?.name ?? pharmacyId
+    act("الحدود الائتمانية", `تعديل حد ${name} إلى ${formatCurrency(changes.limit ?? 0)}${changes.frozen ? " مع إيقاف البيع الآجل" : ""}`, `تم تحديث الحد الائتماني لـ ${name}`)
+  }
+
+  function sendReminder(pharmacyId: string, channel: string) {
+    setCreditProfiles((current) => current.map((item) => item.pharmacyId === pharmacyId ? { ...item, lastReminder: new Date().toISOString(), reminderChannel: channel } : item))
+    const name = pharmacies.find((pharmacy) => pharmacy.id === pharmacyId)?.name ?? pharmacyId
+    act("الحدود الائتمانية", `إرسال تذكير سداد إلى ${name} عبر ${channel}`, `تم إرسال التذكير إلى ${name} عبر ${channel}`)
+  }
+
+  function setIntegration(id: string, connected: boolean) {
+    const target = integrations.find((item) => item.id === id)
+    setIntegrations((current) => current.map((item) => item.id === id ? { ...item, status: connected ? "connected" : "available", lastSync: connected ? new Date().toISOString() : undefined } : item))
+    if (target) act("التكاملات", `${connected ? "ربط" : "فصل"} ${target.name}`, connected ? `تم ربط ${target.name}` : `تم فصل ${target.name}`)
+  }
+
+  function openNotification(item: AppNotification) {
+    setReadNotifications((current) => current.includes(item.id) ? current : [...current, item.id])
+    setTab(item.tab)
+    setFeedback("")
   }
 
   function renderCompanyContent() {
     if (tab === "overview") return <CompanyDashboard orders={orders} products={products} pharmacies={pharmacies} onNavigate={setTab} />
     if (tab === "orders") return <OrdersView orders={orders} onAdvance={advanceOrder} onReject={rejectOrder} />
     if (tab === "inventory") return <InventoryView products={products} onRestock={restock} onSaveProduct={saveProduct} />
-    if (tab === "pharmacies") return <PharmaciesView pharmacies={pharmacies} onToggleStatus={togglePharmacy} />
+    if (tab === "pharmacies") return <PharmaciesView pharmacies={pharmacies} onToggleStatus={togglePharmacy} onAdd={addPharmacy} />
     if (tab === "deliveries") return <CompanyDispatchView orders={orders} agents={demoDeliveryAgents} onAssign={assignDelivery} />
-    if (tab === "invoices") return <InvoicesView invoices={invoices} />
+    if (tab === "invoices") return <InvoicesView invoices={invoices} orders={orders} />
     if (tab === "reports") return <ReportsView orders={orders} invoices={invoices} products={products} />
     if (tab === "archive") return <ArchiveView orders={[...orders, ...demoArchiveOrders]} pharmacies={pharmacies} agents={demoDeliveryAgents} />
     if (tab === "team") return <CompanyTeamView />
     if (tab === "branches") return <BranchesView />
     if (tab === "offers") return <OffersView />
+    if (tab === "expiry") return <ExpiryView batches={batches} products={products} onAction={batchAction} />
+    if (tab === "returns") return <ReturnsView returns={returns} orders={allOrders} onDecide={decideReturn} onCreate={createReturn} />
+    if (tab === "suppliers") return <SuppliersView suppliers={suppliers} purchaseOrders={purchaseOrders} products={products} onCreate={createPurchaseOrders} onReceive={receivePurchaseOrder} onAddSupplier={addSupplier} />
+    if (tab === "credit") return <CreditView pharmacies={pharmacies} profiles={creditProfiles} orders={allOrders} onUpdate={updateCredit} onRemind={sendReminder} />
+    if (tab === "integrations") return <IntegrationsView integrations={integrations} onConnect={(id) => setIntegration(id, true)} onDisconnect={(id) => setIntegration(id, false)} />
+    if (tab === "activity") return <ActivityView entries={activity} />
+    if (tab === "assistant") return <AssistantView products={products} orders={allOrders} batches={batches} pharmacies={pharmacies} onNavigate={setTab} />
     return <SettingsView />
   }
 
@@ -352,13 +505,14 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
           <small>{roleLabels[activeRole]} · دخول تجريبي سريع</small>
         </div>
         <nav className="side-nav" aria-label="التنقل الرئيسي">
-          <span className="nav-caption">{isCompany ? "عمليات الشركة" : isDriver ? "مسار التوصيل" : "مساحة الصيدلية"}</span>
-          {navItems.map((item) => {
+          {!isCompany && <span className="nav-caption">{isDriver ? "مسار التوصيل" : "مساحة الصيدلية"}</span>}
+          {navItems.map((item, index) => {
             const Icon = item.icon
             const isActive = tab === item.id
-            return <button key={item.id} type="button" className={isActive ? "nav-link active" : "nav-link"} aria-current={isActive ? "page" : undefined} onClick={() => { setTab(item.id); setFeedback("") }}>
-              <Icon aria-hidden="true" /><span>{item.label}</span>{item.badge && <span className="nav-new-badge">{item.badge}</span>}{item.id === "orders" && orders.some((order) => order.orderStatus === "pending") && <span className="nav-dot" />}{item.id === "cart" && cartCount > 0 && <span className="nav-count">{cartCount}</span>}
-            </button>
+            const caption = isCompany && item.group && item.group !== navItems[index - 1]?.group ? item.group : null
+            return <Fragment key={item.id}>{caption && <span className="nav-caption nav-group-caption">{caption}</span>}<button type="button" className={isActive ? "nav-link active" : "nav-link"} aria-current={isActive ? "page" : undefined} onClick={() => { setTab(item.id); setFeedback("") }}>
+              <Icon aria-hidden="true" /><span>{item.label}</span>{item.badge && <span className="nav-new-badge">{item.badge}</span>}{item.id === "orders" && orders.some((order) => order.orderStatus === "pending") && <span className="nav-dot" />}{item.id === "cart" && cartCount > 0 && <span className="nav-count">{cartCount}</span>}{item.id === "returns" && returns.some((entry) => entry.status === "pending") && <span className="nav-dot" />}
+            </button></Fragment>
           })}
         </nav>
         <div className="sidebar-bottom">
@@ -371,7 +525,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       <main className="main-area" id="main">
         <header className="topbar">
           <div className="topbar-title"><span className="eyebrow">الشاعر للتوزيع الدوائي · شركة واحدة</span><h1>{page.title}</h1><p>{page.subtitle}</p></div>
-          <div className="topbar-actions">{isPharmacy && <PharmacyOtpBell pharmacyName={currentPharmacy.name} />}<span className="count-badge">واجهة تجريبية</span><Link className="subtle-button quick-login-button" to="/company/sign-in">اختيار حساب <Users aria-hidden="true" /></Link></div>
+          <div className="topbar-actions">{isPharmacy && <PharmacyOtpBell pharmacyName={currentPharmacy.name} />}{isCompany && <NotificationCenter items={notifications} readIds={readNotifications} onOpen={openNotification} onMarkAll={() => setReadNotifications(notifications.map((item) => item.id))} />}<span className="count-badge">واجهة تجريبية</span><Link className="subtle-button quick-login-button" to="/company/sign-in">اختيار حساب <Users aria-hidden="true" /></Link></div>
         </header>
         <div className="company-data-notice demo-data-notice" role="note"><span className="company-data-notice-icon">i</span><p><strong>وضع العرض:</strong> البيانات توضيحية، وأي تعديل يظل مؤقتًا داخل هذه الجلسة.</p></div>
         {feedback && <div className="feedback-message" role="status" aria-live="polite"><span>✓</span>{feedback}<button type="button" onClick={() => setFeedback("")} aria-label="إخفاء الإشعار">×</button></div>}

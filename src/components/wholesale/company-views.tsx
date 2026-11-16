@@ -32,6 +32,8 @@ import {
 } from "./shared"
 import type { Invoice, Order, OrderStatus, Pharmacy, Product } from "./types"
 import { ProductEditorModal } from "./product-editor-modal"
+import { Modal } from "./modal"
+import { TaxInvoiceModal } from "./tax-invoice-modal"
 
 const stepLabels: Partial<Record<OrderStatus, string>> = {
   pending: "مراجعة الطلب",
@@ -313,7 +315,8 @@ export function InventoryView({ products, onRestock, onSaveProduct }: { products
   )
 }
 
-export function PharmaciesView({ pharmacies, onToggleStatus }: { pharmacies: Pharmacy[]; onToggleStatus: (pharmacyId: string) => void }) {
+export function PharmaciesView({ pharmacies, onToggleStatus, onAdd }: { pharmacies: Pharmacy[]; onToggleStatus: (pharmacyId: string) => void; onAdd: (pharmacy: Pharmacy) => void }) {
+  const [adding, setAdding] = useState(false)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<Pharmacy["status"] | "all">("all")
   const normalizedQuery = query.trim().toLocaleLowerCase("ar")
@@ -326,7 +329,7 @@ export function PharmaciesView({ pharmacies, onToggleStatus }: { pharmacies: Pha
 
   return (
     <div className="view-stack">
-      <SectionHeading eyebrow="إدارة العملاء" title="الصيدليات" description="تابع الصيدليات المتعاملة مع الشركة وحالة الاعتماد والرصيد المستحق." action={<button className="subtle-button" type="button" disabled><Plus aria-hidden="true" /> إضافة صيدلية · قيد التطوير</button>} />
+      <SectionHeading eyebrow="إدارة العملاء" title="الصيدليات" description="تابع الصيدليات المتعاملة مع الشركة وحالة الاعتماد والرصيد المستحق." action={<button className="primary-button" type="button" onClick={() => setAdding(true)}><Plus aria-hidden="true" /> إضافة صيدلية</button>} />
       <div className="summary-strip"><div><span>حسابات معتمدة</span><strong>{approved}</strong></div><div><span>بانتظار الاعتماد</span><strong>{pending}</strong></div><div><span>إجمالي المديونيات</span><strong>{formatCurrency(pharmacies.reduce((sum, pharmacy) => sum + pharmacy.balance, 0))}</strong></div><div><span>إجمالي الحسابات</span><strong>{pharmacies.length}</strong></div></div>
       <SectionCard title="دليل الصيدليات" description="قائمة توضيحية للصيدليات وحالة التعامل معها." action={<label className="search-control"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ابحث بالاسم أو الهاتف أو الترخيص" aria-label="ابحث عن صيدلية" /></label>}>
         <div className="filter-row" role="tablist" aria-label="تصفية الصيدليات">
@@ -336,11 +339,31 @@ export function PharmaciesView({ pharmacies, onToggleStatus }: { pharmacies: Pha
           {visible.map((pharmacy) => <tr key={pharmacy.id}><td><div className="pharmacy-cell"><span className="pharmacy-avatar"><Store aria-hidden="true" /></span><span><strong>{pharmacy.name}</strong><small>{pharmacy.contact}</small></span></div></td><td>{pharmacy.region}</td><td>{pharmacy.license}</td><td>{pharmacy.lastOrder}</td><td>{formatCurrency(pharmacy.balance)}</td><td><StatusPill tone={pharmacy.status === "approved" ? "green" : pharmacy.status === "pending" ? "amber" : "red"}>{pharmacy.status === "approved" ? "معتمدة" : pharmacy.status === "pending" ? "بانتظار الاعتماد" : "موقوفة"}</StatusPill></td><td><button className={pharmacy.status === "approved" ? "subtle-button" : "mini-action"} onClick={() => onToggleStatus(pharmacy.id)}>{pharmacy.status === "approved" ? "إيقاف مؤقت" : pharmacy.status === "pending" ? "اعتماد الحساب" : "إعادة التفعيل"}</button></td></tr>)}
         </tbody></table>{visible.length === 0 && <div className="table-empty">لا توجد صيدليات مطابقة.</div>}</div>
       </SectionCard>
+      {adding && <Modal title="إضافة صيدلية" eyebrow="حساب عميل جديد" close={() => setAdding(false)}><form className="fa-form" onSubmit={(event) => {
+        event.preventDefault()
+        const form = new FormData(event.currentTarget)
+        const text = (key: string) => String(form.get(key) ?? "").trim()
+        const nextId = Math.max(1000, ...pharmacies.map((pharmacy) => Number(pharmacy.id.replace("PH-", "")) || 0)) + 1
+        onAdd({ id: `PH-${nextId}`, name: text("name"), contact: text("contact"), region: `${text("district")}، ${text("city")}`, license: `ترخيص · ${text("license")}`, status: form.get("approve") === "on" ? "approved" : "pending", balance: 0, lastOrder: "لا يوجد" })
+        setAdding(false)
+      }}>
+        <div className="fa-grid">
+          <label className="field-label">اسم الصيدلية<input name="name" required placeholder="صيدلية ..." /></label>
+          <label className="field-label">رقم التواصل<input name="contact" dir="ltr" required placeholder="05x xxx xxxx" pattern="[0-9 +]{9,15}" /></label>
+          <label className="field-label">المدينة<select name="city"><option>الرياض</option><option>جدة</option><option>الدمام</option><option>مكة المكرمة</option><option>المدينة المنورة</option></select></label>
+          <label className="field-label">الحي<input name="district" required placeholder="حي النرجس" /></label>
+          <label className="field-label">رقم الترخيص<input name="license" dir="ltr" required /></label>
+          <label className="field-label">المسؤول<input name="owner" placeholder="اسم الصيدلي المسؤول" /></label>
+        </div>
+        <label className="fa-check"><input type="checkbox" name="approve" /> اعتماد الحساب مباشرةً بعد التحقق من الترخيص</label>
+        <button className="primary-button"><Plus aria-hidden="true" /> إضافة الصيدلية</button>
+      </form></Modal>}
     </div>
   )
 }
 
-export function InvoicesView({ invoices }: { invoices: Invoice[] }) {
+export function InvoicesView({ invoices, orders }: { invoices: Invoice[]; orders: Order[] }) {
+  const [preview, setPreview] = useState<Invoice | null>(null)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const balance = invoices.reduce((sum, invoice) => sum + invoice.total - invoice.paidAmount, 0)
@@ -359,14 +382,15 @@ export function InvoicesView({ invoices }: { invoices: Invoice[] }) {
         <div className="filter-row" role="tablist" aria-label="تصفية الفواتير">
           {[{ id: "all", label: "الكل" }, { id: "unpaid", label: "غير مدفوعة" }, { id: "partial", label: "مدفوعة جزئيًا" }, { id: "paid", label: "مدفوعة" }].map((item) => <button key={item.id} role="tab" aria-selected={statusFilter === item.id} className={statusFilter === item.id ? "filter-chip active" : "filter-chip"} onClick={() => setStatusFilter(item.id)}>{item.label}</button>)}
         </div>
-        <div className="table-wrap"><table className="data-table"><thead><tr><th>رقم الفاتورة</th><th>رقم الطلب</th><th>الصيدلية</th><th>تاريخ الإصدار</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th></tr></thead><tbody>
+        <div className="table-wrap"><table className="data-table"><thead><tr><th>رقم الفاتورة</th><th>رقم الطلب</th><th>الصيدلية</th><th>تاريخ الإصدار</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>الفاتورة</th></tr></thead><tbody>
           {visibleInvoices.map((invoice) => {
             const remaining = Math.max(invoice.total - invoice.paidAmount, 0)
-            return <tr key={invoice.id}><td><span className="table-id">{invoice.id}</span></td><td>{invoice.orderId}</td><td><strong>{invoice.pharmacy}</strong></td><td>{formatTime(invoice.issuedAt)}</td><td>{formatCurrency(invoice.total)}</td><td>{formatCurrency(invoice.paidAmount)}</td><td>{formatCurrency(remaining)}</td><td><PaymentStatusPill status={remaining === 0 ? "paid" : invoice.paidAmount > 0 ? "partially_paid" : "unpaid"} /></td></tr>
+            return <tr key={invoice.id}><td><span className="table-id">{invoice.id}</span></td><td>{invoice.orderId}</td><td><strong>{invoice.pharmacy}</strong></td><td>{formatTime(invoice.issuedAt)}</td><td>{formatCurrency(invoice.total)}</td><td>{formatCurrency(invoice.paidAmount)}</td><td>{formatCurrency(remaining)}</td><td><PaymentStatusPill status={remaining === 0 ? "paid" : invoice.paidAmount > 0 ? "partially_paid" : "unpaid"} /></td><td><button className="mini-action" type="button" onClick={() => setPreview(invoice)}><FileText aria-hidden="true" /> فاتورة ضريبية</button></td></tr>
           })}
         </tbody></table>{visibleInvoices.length === 0 && <div className="table-empty">لا توجد فواتير مطابقة للبحث والفلاتر.</div>}</div>
       </SectionCard>
       <div className="accounting-note"><ShieldCheck aria-hidden="true" /><div><strong>فصل التسليم عن التحصيل</strong><p>إثبات وصول الطلب لا يغيّر حالة الفاتورة تلقائيًا. تُحدّث الأرصدة فقط عند تسجيل مبلغ التحصيل في خطوة التسليم.</p></div><ArrowUpRight aria-hidden="true" /></div>
+      {preview && <TaxInvoiceModal invoice={preview} order={orders.find((order) => order.id === preview.orderId)} onClose={() => setPreview(null)} />}
     </div>
   )
 }

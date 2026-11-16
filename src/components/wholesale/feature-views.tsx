@@ -1,14 +1,10 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Modal } from "./modal"
 import { Building2, MapPin, Users, X, Plus, Tag } from "lucide-react"
 import { toast } from "sonner"
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { MetricCard, SectionCard, SectionHeading, StatusPill, formatCurrency } from "./shared"
 
-function Modal({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {
-  const id = useId()
-  useEffect(() => { const handler = (e: KeyboardEvent) => { if (e.key === "Escape") close() }; document.addEventListener("keydown", handler); return () => document.removeEventListener("keydown", handler) }, [close])
-  return <div className="modal-backdrop" onClick={close}><section className="detail-modal fa-modal" role="dialog" aria-modal="true" aria-labelledby={id} onClick={e => e.stopPropagation()}><div className="modal-head"><h2 id={id}>{title}</h2><button type="button" className="icon-action" aria-label="إغلاق" onClick={close}><X /></button></div>{children}</section></div>
-}
 const products = ["بنادول أدفانس", "بروفين ٤٠٠", "فيتامين سي", "أوجمنتين", "زيرتك", "بيبانثين"]
 type Branch = { id: number; name: string; city: string; type: string; manager: string; phone: string; areas: string[]; active: boolean; orders: number }
 const initialBranches: Branch[] = [
