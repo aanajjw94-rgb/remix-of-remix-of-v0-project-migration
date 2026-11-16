@@ -1,0 +1,117 @@
+{
+  "source": "v0 (Next.js 16, better-auth, Drizzle + Postgres)",
+  "capabilities": [
+    {
+      "capability": "code: demo workspace (company, driver, pharmacy demo views)",
+      "source": "app/page.tsx, app/company, app/driver, app/pharmacy, components/wholesale/*",
+      "outcome": "migrate",
+      "status": "verified",
+      "next_action": "none — all demo routes render"
+    },
+    {
+      "capability": "code: pharmacy portal (catalog, cart, orders, cancel, reorder)",
+      "source": "app/pharmacy/portal, components/wholesale/pharmacy-portal.tsx, app/actions/pharmacy.ts",
+      "outcome": "migrate",
+      "status": "verified",
+      "next_action": "none — order create/cancel verified end-to-end"
+    },
+    {
+      "capability": "schema: pharmacy_profiles, pharmacy_products, pharmacy_orders",
+      "source": "lib/db/schema.ts",
+      "outcome": "migrate",
+      "status": "verified",
+      "next_action": "none"
+    },
+    {
+      "capability": "schema: companies, company_members, company_invites, company_products, company_pharmacies, company_orders, company_stock_movements",
+      "source": "lib/db/schema.ts (defined, not used by app code)",
+      "outcome": "migrate",
+      "status": "done",
+      "next_action": "Import records when exported"
+    },
+    {
+      "capability": "records: application tables",
+      "source": "Postgres via DATABASE_URL (no export in ZIP)",
+      "outcome": "migrate",
+      "status": "pending",
+      "next_action": "User exports tables as CSV/JSON"
+    },
+    {
+      "capability": "auth identities: user table (better-auth email/password)",
+      "source": "lib/auth.ts, user/account/session/verification tables",
+      "outcome": "migrate",
+      "status": "pending",
+      "next_action": "User exports user table (id, name, email); create passwordless accounts + legacy_user_map rows; users claim via /forgot-password. New sign-ups verified (email confirmation on)."
+    },
+    {
+      "capability": "authorization: per-user pharmacy data isolation",
+      "source": "app/actions/pharmacy.ts userId filters",
+      "outcome": "migrate",
+      "status": "verified",
+      "next_action": "none — owner-only read policies; writes only via checked functions"
+    },
+    {
+      "capability": "public endpoint: /api/auth/[...all]",
+      "source": "better-auth handler",
+      "outcome": "replaced",
+      "status": "done",
+      "next_action": "none"
+    },
+    {
+      "capability": "demo delivery OTP (browser-local)",
+      "source": "components/wholesale/otp-store.ts",
+      "outcome": "migrate",
+      "status": "done",
+      "next_action": "none"
+    },
+    {
+      "capability": "analytics: @vercel/analytics",
+      "source": "package.json only, never imported",
+      "outcome": "not used",
+      "status": "accepted",
+      "next_action": "none"
+    },
+    {
+      "capability": "security headers",
+      "source": "next.config.mjs",
+      "outcome": "partially migrate",
+      "status": "done",
+      "next_action": "X-Frame-Options intentionally omitted"
+    },
+    {
+      "capability": "secrets",
+      "source": "DATABASE_URL, BETTER_AUTH_URL, V0_*, VERCEL_*",
+      "outcome": "not needed",
+      "status": "accepted",
+      "next_action": "Database and auth replaced by Lovable Cloud; V0_/VERCEL_ are platform metadata"
+    },
+    {
+      "capability": "uploaded files / storage",
+      "source": "none detected",
+      "outcome": "absent",
+      "status": "accepted",
+      "next_action": "none"
+    },
+    {
+      "capability": "schedules / webhooks / payments / email / AI",
+      "source": "none detected",
+      "outcome": "absent",
+      "status": "accepted",
+      "next_action": "none"
+    },
+    {
+      "capability": "cutover",
+      "source": "Vercel deployment",
+      "outcome": "pending",
+      "status": "pending",
+      "next_action": "Publish in Lovable, then point domain"
+    },
+    {
+      "capability": "verification",
+      "source": "-",
+      "outcome": "migrate",
+      "status": "partial",
+      "next_action": "Imported-user first login pending user export"
+    }
+  ]
+}
