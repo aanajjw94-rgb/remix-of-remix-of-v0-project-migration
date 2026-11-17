@@ -1,4 +1,4 @@
-import type { Invoice, Order, OrderStatus } from "./types"
+import type { CartLine, Invoice, Order, OrderStatus, Product } from "./types"
 
 export type CatalogOffer = { code: string; name: string; percent: number; minimum: number; productIds: string[] }
 
@@ -14,6 +14,20 @@ export function offerForProduct(productId: string, offers: CatalogOffer[] = cata
 
 export function discountedPrice(price: number, percent: number) {
   return Math.round(price * (100 - percent)) / 100
+}
+
+/** Prices a demo cart consistently in the catalog, checkout and created order. */
+export function cartPricing(cart: CartLine[], products: Product[], offers: CatalogOffer[] = catalogOffers) {
+  const subtotal = cart.reduce((sum, line) => sum + (products.find((product) => product.id === line.productId)?.price ?? 0) * line.quantity, 0)
+  const prices: Record<string, number> = {}
+  for (const line of cart) {
+    const product = products.find((item) => item.id === line.productId)
+    if (!product) continue
+    const offer = offerForProduct(product.id, offers)
+    prices[product.id] = offer && subtotal >= offer.minimum ? discountedPrice(product.price, offer.percent) : product.price
+  }
+  const total = Math.round(cart.reduce((sum, line) => sum + (prices[line.productId] ?? 0) * line.quantity, 0) * 100) / 100
+  return { subtotal, total, savings: Math.round((subtotal - total) * 100) / 100, prices }
 }
 
 export const timelineSteps: Array<{ status: OrderStatus; label: string }> = [

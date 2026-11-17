@@ -79,6 +79,7 @@ const orderItems = (entries: Array<[string, number]>) => entries.map(([productId
 })
 
 export const demoOrders: Order[] = [
+  { id: "ORD-242", pharmacy: "صيدلية الندى التجريبية", pharmacyPhone: "050 000 0141", region: "حي الندى، الرياض", items: orderItems([["MED-1050", 6], ["MED-1086", 2]]), total: 140, orderStatus: "delivered", deliveryStatus: "delivered", paymentStatus: "partially_paid", paymentMethod: "نقدًا عند التسليم", paidAmount: 80, assignedTo: "DA-102", createdAt: hoursAgo(14), invoiceId: "INV-242", recipientName: "مها العتيبي", deliveryAddress: "حي الندى، شارع الأمير ناصر", deliveryProof: { recipient: "مها العتيبي", collectedAmount: 80, paymentMethod: "نقدًا", note: "تمت مراجعة الأصناف عند الاستلام", deliveredAt: hoursAgo(12), otpVerified: true } },
   { id: "ORD-241", pharmacy: "صيدلية الندى التجريبية", pharmacyPhone: "050 000 0141", region: "حي الندى، الرياض", items: orderItems([["MED-1042", 8], ["MED-1187", 5]]), total: 476, orderStatus: "pending", deliveryStatus: null, paymentStatus: "unpaid", paymentMethod: "آجل", paidAmount: 0, assignedTo: null, createdAt: hoursAgo(1), invoiceId: null, recipientName: "مها العتيبي", deliveryAddress: "حي الندى، شارع الأمير ناصر", requestedDeliveryWindow: "صباحًا", note: "التسليم قبل الساعة ٢ مساءً" },
   { id: "ORD-240", pharmacy: "صيدلية الشفاء التجريبية", pharmacyPhone: "050 000 0183", region: "حي الملقا، الرياض", items: orderItems([["MED-2051", 4], ["MED-2290", 6]]), total: 464, orderStatus: "accepted", deliveryStatus: null, paymentStatus: "unpaid", paymentMethod: "تحويل بنكي", paidAmount: 0, assignedTo: null, createdAt: hoursAgo(2), invoiceId: null, recipientName: "نورة الحربي", deliveryAddress: "حي الملقا، طريق أنس بن مالك", requestedDeliveryWindow: "بعد الظهر" },
   { id: "ORD-239", pharmacy: "صيدلية الياسمين التجريبية", pharmacyPhone: "050 000 0294", region: "حي الياسمين، الرياض", items: orderItems([["MED-3104", 12], ["MED-3288", 3]]), total: 384, orderStatus: "ready", deliveryStatus: null, paymentStatus: "unpaid", paymentMethod: "نقدًا عند التسليم", paidAmount: 0, assignedTo: null, createdAt: hoursAgo(3), invoiceId: null, recipientName: "سارة المطيري", deliveryAddress: "حي الياسمين، شارع أبي بكر" },
@@ -95,6 +96,7 @@ export const demoPharmacies: Pharmacy[] = [
 ]
 
 export const demoInvoices: Invoice[] = [
+  { id: "INV-242", orderId: "ORD-242", pharmacy: "صيدلية الندى التجريبية", issuedAt: hoursAgo(14), total: 140, paidAmount: 80, paymentMethod: "نقدًا عند التسليم" },
   { id: "INV-238", orderId: "ORD-238", pharmacy: "صيدلية الندى التجريبية", issuedAt: hoursAgo(4), total: 556, paidAmount: 0, paymentMethod: "نقدًا عند التسليم" },
   { id: "INV-237", orderId: "ORD-237", pharmacy: "صيدلية الشفاء التجريبية", issuedAt: hoursAgo(7), total: 357, paidAmount: 100, paymentMethod: "نقدًا عند التسليم" },
   { id: "INV-236", orderId: "ORD-236", pharmacy: "صيدلية الندى التجريبية", issuedAt: hoursAgo(9), total: 299, paidAmount: 0, paymentMethod: "نقدًا عند التسليم" },

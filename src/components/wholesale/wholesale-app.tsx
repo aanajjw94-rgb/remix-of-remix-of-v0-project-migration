@@ -12,9 +12,15 @@ import {
   ClipboardList,
   CreditCard,
   Factory,
+  Heart,
   History,
+  LifeBuoy,
+  ListChecks,
+  MoreHorizontal,
   Plug,
+  ReceiptText,
   RotateCcw,
+  Route as RouteIcon,
   FileText,
   LayoutDashboard,
   Package,
@@ -31,6 +37,7 @@ import { CompanyDispatchView } from "./dispatch-view"
 import { CompanyTeamView } from "./company-team-view"
 import { DeliveryView } from "./delivery-view"
 import { PharmacyAccount, PharmacyCart, PharmacyCatalog, PharmacyHome, PharmacyInvoices, PharmacyOrders } from "./pharmacy-views"
+import { PharmacyFavorites, PharmacyStatement, PharmacySupport, PharmacyTracking, type ReorderList } from "./pharmacy-extras"
 import { ReportsView } from "./reports-view"
 import { PharmacyOtpAlerts, PharmacyOtpBell } from "./pharmacy-otp-notifications"
 import { ArchiveView } from "./archive-view"
@@ -47,10 +54,12 @@ import { ReturnsView, type NewReturn } from "./returns-view"
 import { SuppliersView, expectedDate, type NewPurchaseOrder } from "./suppliers-view"
 import { DEMO_NOW, createDemoBatches, demoActivity, demoActorNames, demoCreditProfiles, demoIntegrations, demoPurchaseOrders, demoReturns, demoSuppliers, restockableReasons, type ActivityEntry, type Batch, type CreditProfile, type Integration, type PurchaseOrder, type ReturnRequest, type Supplier } from "./ops-data"
 import { applyCreditNote, returnAmount } from "./ops-logic"
-import type { CartLine, CheckoutDetails, DeliveryStatus, Invoice, Order, Pharmacy, Product } from "./types"
+import { cartPricing, catalogOffers } from "./portal-logic"
+import { Modal } from "./modal"
+import type { CartLine, CheckoutDetails, DeliveryEvidence, DeliveryStatus, Invoice, Order, Pharmacy, Product } from "./types"
 
 export type DemoRole = "owner" | "inventory" | "orders" | "dispatcher" | "driver" | "pharmacy"
-type Tab = "overview" | "archive" | "orders" | "inventory" | "pharmacies" | "deliveries" | "invoices" | "reports" | "team" | "branches" | "offers" | "settings" | "expiry" | "returns" | "suppliers" | "credit" | "integrations" | "activity" | "assistant" | "home" | "catalog" | "cart" | "account"
+type Tab = "overview" | "archive" | "orders" | "inventory" | "pharmacies" | "deliveries" | "invoices" | "reports" | "team" | "branches" | "offers" | "settings" | "expiry" | "returns" | "suppliers" | "credit" | "integrations" | "activity" | "assistant" | "home" | "catalog" | "cart" | "favorites" | "tracking" | "support" | "statement" | "account"
 type InitialRole = "company" | "driver" | "pharmacy"
 type Props = { initialRole: InitialRole; initialDemoRole?: DemoRole; startTour?: boolean | undefined }
 
@@ -81,11 +90,17 @@ const companyNavigation: NavItem[] = [
 const pharmacyNavigation: NavItem[] = [
   { id: "home", label: "الرئيسية", icon: LayoutDashboard },
   { id: "catalog", label: "كتالوج المنتجات", icon: Package },
+  { id: "favorites", label: "المفضلة والقوائم", icon: Heart, badge: "جديد" },
   { id: "cart", label: "سلة الطلبات", icon: ClipboardList },
   { id: "orders", label: "طلباتي", icon: Truck },
+  { id: "tracking", label: "التتبع والمرتجعات", icon: RouteIcon, badge: "جديد" },
   { id: "invoices", label: "الفواتير", icon: FileText },
+  { id: "statement", label: "كشف الحساب", icon: ReceiptText, badge: "جديد" },
+  { id: "support", label: "الدعم والتذاكر", icon: LifeBuoy, badge: "جديد" },
   { id: "account", label: "حساب الصيدلية", icon: Store },
 ]
+
+const pharmacyMobilePrimary: Tab[] = ["home", "catalog", "cart", "tracking"]
 
 const roleNavigation: Record<DemoRole, Tab[]> = {
   owner: companyNavigation.map((item) => item.id),
@@ -93,7 +108,7 @@ const roleNavigation: Record<DemoRole, Tab[]> = {
   orders: ["overview", "orders", "returns", "pharmacies", "invoices", "credit", "reports", "assistant", "archive"],
   dispatcher: ["overview", "orders", "deliveries", "branches"],
   driver: ["deliveries"],
-  pharmacy: ["home", "catalog", "cart", "orders", "invoices", "account"],
+  pharmacy: ["home", "catalog", "cart", "favorites", "orders", "tracking", "invoices", "statement", "support", "account"],
 }
 
 const roleLabels: Record<DemoRole, string> = {
@@ -128,6 +143,10 @@ const pageCopy: Record<Tab, { title: string; subtitle: string }> = {
   home: { title: "الرئيسية", subtitle: "ملخص حساب الصيدلية" },
   catalog: { title: "كتالوج المنتجات", subtitle: "تصفح المنتجات وأضف احتياجاتك إلى السلة" },
   cart: { title: "سلة الطلبات", subtitle: "راجع الأصناف وتفاصيل التسليم قبل الإرسال" },
+  favorites: { title: "المفضلة والطلب المتكرر", subtitle: "قوائم جاهزة تختصر وقت تجهيز طلبك" },
+  tracking: { title: "التتبع والمرتجعات", subtitle: "خط الطلب الزمني ورمز التسليم وطلبات الإرجاع" },
+  support: { title: "الدعم والتذاكر", subtitle: "افتح تذكرة وتابع رد فريق الدعم" },
+  statement: { title: "كشف الحساب", subtitle: "الفواتير والمدفوعات والرصيد المستحق" },
   account: { title: "حساب الصيدلية", subtitle: "بيانات الحساب والرصيد التجريبي" },
 }
 
@@ -152,6 +171,9 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
   const [integrations, setIntegrations] = useState<Integration[]>(() => demoIntegrations.map((item) => ({ ...item })))
   const [activity, setActivity] = useState<ActivityEntry[]>(() => demoActivity.map((item) => ({ ...item })))
   const [readNotifications, setReadNotifications] = useState<string[]>([])
+  const [favorites, setFavorites] = useState<string[]>(["MED-1042", "MED-1050"])
+  const [reorderLists, setReorderLists] = useState<ReorderList[]>([{ id: "LIST-1", name: "طلب الأسبوع", lines: [{ productId: "MED-1042", quantity: 6 }, { productId: "MED-1086", quantity: 2 }] }])
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
 
   const isCompany = !["driver", "pharmacy"].includes(activeRole)
   const isPharmacy = activeRole === "pharmacy"
@@ -189,6 +211,13 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     setActiveRole(role)
     setTab(startTab(role))
     setFeedback("")
+    setMobileMoreOpen(false)
+  }
+
+  function openTab(nextTab: Tab) {
+    setTab(nextTab)
+    setFeedback("")
+    setMobileMoreOpen(false)
   }
 
   function addToCart(productId: string) {
@@ -208,10 +237,45 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     setCart((current) => current.flatMap((item) => item.productId !== productId ? [item] : item.quantity > 1 ? [{ ...item, quantity: item.quantity - 1 }] : []))
   }
 
+  function toggleFavorite(productId: string) {
+    const removing = favorites.includes(productId)
+    setFavorites((current) => removing ? current.filter((id) => id !== productId) : [...current, productId])
+    const product = products.find((item) => item.id === productId)
+    toast.success(removing ? `أُزيل ${product?.name ?? "الصنف"} من المفضلة` : `حُفظ ${product?.name ?? "الصنف"} في المفضلة`)
+  }
+
+  function saveReorderList(name: string) {
+    const id = `LIST-${Date.now()}`
+    setReorderLists((current) => [{ id, name, lines: cart.map((line) => ({ ...line })) }, ...current])
+    log("الصيدلية", `حفظ قائمة الطلب المتكرر ${name}`)
+    toast.success(`تم حفظ «${name}» للطلب المتكرر`)
+  }
+
+  function useReorderList(list: ReorderList) {
+    const next = cart.map((line) => ({ ...line }))
+    for (const line of list.lines) {
+      const product = products.find((item) => item.id === line.productId)
+      if (!product) continue
+      const available = Math.max(product.stock - product.reserved, 0)
+      const existing = next.find((item) => item.productId === line.productId)
+      if (existing) existing.quantity = Math.min(available, existing.quantity + line.quantity)
+      else if (available > 0) next.push({ productId: line.productId, quantity: Math.min(available, line.quantity) })
+    }
+    setCart(next)
+    setTab("cart")
+    notify(next.length ? `أُضيفت الأصناف المتاحة من «${list.name}» إلى السلة.` : "لا توجد كميات متاحة من هذه القائمة حاليًا.")
+  }
+
+  function deleteReorderList(id: string) {
+    setReorderLists((current) => current.filter((list) => list.id !== id))
+    toast.success("تم حذف القائمة")
+  }
+
   function submitOrder(details: CheckoutDetails) {
+    const pricing = cartPricing(cart, products, catalogOffers)
     const lineItems = cart.flatMap((line) => {
       const product = products.find((item) => item.id === line.productId)
-      return product ? [{ productId: product.id, name: product.name, quantity: line.quantity, unitPrice: product.price }] : []
+      return product ? [{ productId: product.id, name: product.name, quantity: line.quantity, unitPrice: pricing.prices[product.id] ?? product.price }] : []
     })
     if (!lineItems.length) return notify("أضف منتجًا واحدًا على الأقل قبل إرسال الطلب.")
     const nextNumber = Math.max(240, ...orders.map((order) => Number(order.id.replace("ORD-", "")) || 0)) + 1
@@ -224,7 +288,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       requestedDeliveryWindow: details.deliveryWindow,
       region: currentPharmacy.region,
       items: lineItems,
-      total: lineItems.reduce((total, item) => total + item.quantity * item.unitPrice, 0),
+      total: pricing.total,
       orderStatus: "pending",
       deliveryStatus: null,
       paymentStatus: "unpaid",
@@ -338,7 +402,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     notify("تم تحديث حالة التوصيل في بيانات العرض.")
   }
 
-  function completeDelivery(orderId: string, recipient: string, collectedAmount: number, paymentMethod: string, note: string, otpVerified = false) {
+  function completeDelivery(orderId: string, recipient: string, collectedAmount: number, paymentMethod: string, note: string, otpVerified = false, evidence?: DeliveryEvidence) {
     const order = orders.find((item) => item.id === orderId)
     if (!order) return
     const paidAmount = Math.min(order.total, order.paidAmount + Math.max(0, collectedAmount))
@@ -349,7 +413,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       deliveryStatus: "delivered",
       paidAmount,
       paymentStatus,
-      deliveryProof: { recipient, collectedAmount, paymentMethod, note, deliveredAt: new Date().toISOString(), otpVerified },
+      deliveryProof: { recipient, collectedAmount, paymentMethod, note, deliveredAt: new Date().toISOString(), otpVerified, evidence },
     })
     setProducts((current) => current.map((product) => {
       const delivered = order.items.filter((item) => item.productId === product.id).reduce((total, item) => total + item.quantity, 0)
@@ -472,10 +536,14 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
 
   function renderPharmacyContent() {
     if (tab === "home") return <PharmacyHome pharmacyName={currentPharmacy.name} products={products} orders={pharmacyOrders} invoices={pharmacyInvoices} onAdd={addToCart} onNavigate={setTab} onReorder={reorderOrder} />
-    if (tab === "catalog") return <PharmacyCatalog pharmacyName={currentPharmacy.name} products={products} cart={cart} query={catalogQuery} onQueryChange={setCatalogQuery} onAdd={addToCart} onNavigate={setTab} />
-    if (tab === "cart") return <PharmacyCart products={products} cart={cart} onAdd={addToCart} onRemove={removeFromCart} onSubmit={submitOrder} pharmacyName={currentPharmacy.name} contactName="مها العتيبي" phone={currentPharmacy.contact} address={currentPharmacy.region} isSubmitting={false} />
+    if (tab === "catalog") return <PharmacyCatalog pharmacyName={currentPharmacy.name} products={products} cart={cart} query={catalogQuery} onQueryChange={setCatalogQuery} onAdd={addToCart} onNavigate={setTab} favorites={favorites} onToggleFavorite={toggleFavorite} offers={catalogOffers} />
+    if (tab === "favorites") return <PharmacyFavorites products={products} favorites={favorites} lists={reorderLists} cart={cart} onToggleFavorite={toggleFavorite} onAdd={addToCart} onSaveList={saveReorderList} onUseList={useReorderList} onDeleteList={deleteReorderList} />
+    if (tab === "cart") return <PharmacyCart products={products} cart={cart} onAdd={addToCart} onRemove={removeFromCart} onSubmit={submitOrder} pharmacyName={currentPharmacy.name} contactName="مها العتيبي" phone={currentPharmacy.contact} address={currentPharmacy.region} isSubmitting={false} offers={catalogOffers} />
     if (tab === "orders") return <PharmacyOrders orders={pharmacyOrders} agents={demoDeliveryAgents} onCancel={cancelPharmacyOrder} onReorder={reorderOrder} />
+    if (tab === "tracking") return <PharmacyTracking orders={pharmacyOrders} returns={returns.filter((entry) => entry.pharmacy === currentPharmacy.name)} onRequestReturn={createReturn} />
     if (tab === "invoices") return <PharmacyInvoices invoices={pharmacyInvoices} orders={pharmacyOrders} />
+    if (tab === "statement") return <PharmacyStatement invoices={pharmacyInvoices} creditLimit={creditProfiles.find((profile) => profile.pharmacyId === currentPharmacy.id)?.limit} />
+    if (tab === "support") return <PharmacySupport />
     return <PharmacyAccount pharmacy={currentPharmacy} outstandingBalance={outstandingBalance} onNavigate={setTab} />
   }
 
@@ -486,7 +554,7 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
       : renderCompanyContent()
 
   return (
-    <div className="app-shell" dir="rtl">
+    <div className={`app-shell demo-shell ${isPharmacy ? "is-pharmacy" : isDriver ? "is-driver" : "is-company"}`} dir="rtl">
       <aside className="sidebar">
         <Link className="brand" to="/" aria-label="الشاعر للتوزيع الدوائي">
           <span className="brand-mark"><Activity aria-hidden="true" /></span>
@@ -532,6 +600,19 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
         <div className="page-content">{isPharmacy && <PharmacyOtpAlerts pharmacyName={currentPharmacy.name} />}{content}</div>
         <footer className="app-footer"><span>الشاعر · مساحة عمليات موحّدة</span><span>نسخة عرض للعميل · لا توجد بيانات فعلية</span></footer>
       </main>
+      {isPharmacy && <>
+        <nav className="mobile-bottom-nav" aria-label="قائمة الصيدلية للجوال">
+          {pharmacyNavigation.filter((item) => pharmacyMobilePrimary.includes(item.id)).map((item) => {
+            const Icon = item.icon
+            return <button key={item.id} type="button" className={tab === item.id ? "active" : ""} aria-current={tab === item.id ? "page" : undefined} onClick={() => openTab(item.id)}><span className="mobile-nav-icon"><Icon aria-hidden="true" />{item.id === "cart" && cartCount > 0 && <b>{cartCount}</b>}</span><small>{item.id === "tracking" ? "التتبع" : item.id === "catalog" ? "الكتالوج" : item.label}</small></button>
+          })}
+          <button type="button" className={mobileMoreOpen || !pharmacyMobilePrimary.includes(tab) ? "active" : ""} aria-expanded={mobileMoreOpen} onClick={() => setMobileMoreOpen(true)}><span className="mobile-nav-icon"><MoreHorizontal aria-hidden="true" /></span><small>المزيد</small></button>
+        </nav>
+        {mobileMoreOpen && <Modal title="المزيد من حساب الصيدلية" close={() => setMobileMoreOpen(false)} className="mobile-more-sheet">
+          <div className="mobile-more-grid">{pharmacyNavigation.filter((item) => !pharmacyMobilePrimary.includes(item.id)).map((item) => { const Icon = item.icon; return <button key={item.id} type="button" className={tab === item.id ? "active" : ""} onClick={() => openTab(item.id)}><Icon aria-hidden="true" /><span>{item.label}</span></button> })}</div>
+          <label className="mobile-role-switch" htmlFor="mobile-demo-role-switch">تبديل واجهة العرض<select id="mobile-demo-role-switch" value={activeRole} onChange={(event) => switchRole(event.target.value as DemoRole)}><optgroup label="فريق الشركة"><option value="owner">مالك الشركة</option><option value="inventory">مسؤول المخزون</option><option value="orders">مسؤول الطلبات</option><option value="dispatcher">مسؤول التوصيل</option></optgroup><optgroup label="واجهات العملاء"><option value="driver">مندوب التوصيل</option><option value="pharmacy">حساب الصيدلية</option></optgroup></select></label>
+        </Modal>}
+      </>}
     </div>
   )
 }

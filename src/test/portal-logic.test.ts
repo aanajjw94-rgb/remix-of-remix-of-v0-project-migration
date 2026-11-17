@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildStatement, discountedPrice, driverDaySummary, offerForProduct, timelineIndex } from "@/components/wholesale/portal-logic"
+import { buildStatement, cartPricing, discountedPrice, driverDaySummary, offerForProduct, timelineIndex } from "@/components/wholesale/portal-logic"
 import type { Invoice, Order } from "@/components/wholesale/types"
 
 const invoice = (id: string, total: number, paidAmount: number, issuedAt: string): Invoice => ({ id, orderId: id.replace("INV", "ORD"), pharmacy: "ص", issuedAt, total, paidAmount, paymentMethod: "نقدًا" })
@@ -12,6 +12,14 @@ describe("catalog offers", () => {
   })
   it("applies a percentage discount to the price", () => {
     expect(discountedPrice(80, 15)).toBe(68)
+  })
+  it("activates a product offer only when the cart reaches its minimum", () => {
+    const products = [{ id: "X", price: 100 }, { id: "Y", price: 20 }] as import("@/components/wholesale/types").Product[]
+    const offers = [{ code: "A", name: "عرض", percent: 15, minimum: 500, productIds: ["X"] }]
+    expect(cartPricing([{ productId: "X", quantity: 4 }], products, offers).total).toBe(400)
+    const priced = cartPricing([{ productId: "X", quantity: 4 }, { productId: "Y", quantity: 5 }], products, offers)
+    expect(priced.total).toBe(440)
+    expect(priced.savings).toBe(60)
   })
 })
 

@@ -35,6 +35,12 @@ export type OrderItem = {
   unitPrice: number
 }
 
+export type DeliveryEvidence = {
+  type: "photo" | "signature"
+  dataUrl: string
+  fileName?: string | undefined
+}
+
 export type DeliveryProof = {
   recipient: string
   collectedAmount: number
@@ -42,6 +48,7 @@ export type DeliveryProof = {
   note: string
   deliveredAt: string
   otpVerified?: boolean | undefined
+  evidence?: DeliveryEvidence | undefined
 }
 
 export type Order = {

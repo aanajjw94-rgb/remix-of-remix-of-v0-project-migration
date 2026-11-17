@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Clock3,
   FileText,
+  Heart,
   MapPin,
   Minus,
   Package,
@@ -15,8 +16,10 @@ import {
   RotateCcw,
   Search,
   ShoppingBag,
+  Tag,
   Wallet,
 } from "lucide-react"
+import { cartPricing, discountedPrice, offerForProduct, type CatalogOffer } from "./portal-logic"
 import { formatCurrency, formatTime, OrderStatusPill, PaymentStatusPill, SectionCard, SectionHeading, StatusPill } from "./shared"
 import type { CartLine, CheckoutDetails, DeliveryAgent, Invoice, Order, Pharmacy, Product } from "./types"
 
@@ -127,6 +130,9 @@ export function PharmacyCatalog({
   onQueryChange,
   onAdd,
   onNavigate,
+  favorites = [],
+  onToggleFavorite,
+  offers = [],
 }: {
   pharmacyName: string
   products: Product[]
@@ -135,6 +141,9 @@ export function PharmacyCatalog({
   onQueryChange: (value: string) => void
   onAdd: (productId: string) => void
   onNavigate: (tab: PharmacyDestination) => void
+  favorites?: string[]
+  onToggleFavorite?: ((productId: string) => void) | undefined
+  offers?: CatalogOffer[]
 }) {
   const [category, setCategory] = useState("الكل")
   const categories = ["الكل", ...Array.from(new Set(products.map((product) => product.category)))]
@@ -144,6 +153,7 @@ export function PharmacyCatalog({
     return searchableText.includes(searchTerm) && (category === "الكل" || product.category === category)
   }), [products, searchTerm, category])
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0)
+  const pricing = cartPricing(cart, products, offers)
 
   return (
     <div className="view-stack">
@@ -160,11 +170,14 @@ export function PharmacyCatalog({
         {filtered.map((product) => {
           const cartQuantity = cart.find((line) => line.productId === product.id)?.quantity ?? 0
           const available = Math.max(product.stock - product.reserved, 0)
-          return <article className="product-card" key={product.id}>
-            <div className="product-card-top"><span className="product-art"><Package aria-hidden="true" /></span>{product.tag && <StatusPill tone={product.tag === "مخزون منخفض" ? "amber" : "teal"}>{product.tag}</StatusPill>}</div>
+          const offer = offerForProduct(product.id, offers)
+          const favorite = favorites.includes(product.id)
+          return <article className={offer ? "product-card has-offer" : "product-card"} key={product.id}>
+            <div className="product-card-top"><span className="product-art"><Package aria-hidden="true" /></span><span className="product-card-flags">{offer && <StatusPill tone="amber">خصم {offer.percent}%</StatusPill>}{product.tag && <StatusPill tone={product.tag === "مخزون منخفض" ? "amber" : "teal"}>{product.tag}</StatusPill>}</span>{onToggleFavorite && <button type="button" className={favorite ? "favorite-button active" : "favorite-button"} aria-pressed={favorite} aria-label={favorite ? `إزالة ${product.name} من المفضلة` : `إضافة ${product.name} إلى المفضلة`} onClick={() => onToggleFavorite(product.id)}><Heart aria-hidden="true" fill={favorite ? "currentColor" : "none"} /></button>}</div>
             <div className="product-card-copy"><span className="product-category">{product.category} · {product.id}</span><h3>{product.name}</h3><p>{product.scientificName}</p><span className="product-manufacturer">{product.manufacturer}</span></div>
+            {offer && <div className={pricing.subtotal >= offer.minimum ? "product-offer active" : "product-offer"}><Tag aria-hidden="true" /><span><strong>{offer.name}</strong><small>{pricing.subtotal >= offer.minimum ? "الخصم مفعّل على سلة طلبك" : `يُفعّل عند وصول السلة إلى ${formatCurrency(offer.minimum)}`}</small></span></div>}
             <div className="product-pack-row"><span>{product.pack}</span><span>{available} متاح</span></div>
-            <div className="product-card-bottom"><div><strong>{formatCurrency(product.price)}</strong><small>للوحدة · سعر الوحدة</small></div><button type="button" className={cartQuantity ? "add-to-cart added" : "add-to-cart"} onClick={() => onAdd(product.id)} disabled={available <= cartQuantity} aria-label={`إضافة ${product.name} إلى السلة`}>{cartQuantity ? `أضف المزيد (${cartQuantity})` : "إضافة للسلة"}<Plus aria-hidden="true" /></button></div>
+            <div className="product-card-bottom"><div><span className="product-price-line">{offer && <del>{formatCurrency(product.price)}</del>}<strong>{formatCurrency(offer ? discountedPrice(product.price, offer.percent) : product.price)}</strong></span><small>{offer ? "سعر الوحدة مع العرض" : "للوحدة · سعر الوحدة"}</small></div><button type="button" className={cartQuantity ? "add-to-cart added" : "add-to-cart"} onClick={() => onAdd(product.id)} disabled={available <= cartQuantity} aria-label={`إضافة ${product.name} إلى السلة`}>{cartQuantity ? `أضف المزيد (${cartQuantity})` : "إضافة للسلة"}<Plus aria-hidden="true" /></button></div>
           </article>
         })}
         {filtered.length === 0 && <div className="table-empty">لا توجد منتجات مطابقة. جرّب كلمة بحث أو فئة أخرى.</div>}
@@ -173,7 +186,7 @@ export function PharmacyCatalog({
   )
 }
 
-export function PharmacyCart({ products, cart, onAdd, onRemove, onSubmit, pharmacyName, contactName, phone, address, isSubmitting }: {
+export function PharmacyCart({ products, cart, onAdd, onRemove, onSubmit, pharmacyName, contactName, phone, address, isSubmitting, offers = [] }: {
   products: Product[]
   cart: CartLine[]
   onAdd: (productId: string) => void
@@ -184,6 +197,7 @@ export function PharmacyCart({ products, cart, onAdd, onRemove, onSubmit, pharma
   phone: string
   address: string
   isSubmitting: boolean
+  offers?: CatalogOffer[]
 }) {
   const [checkout, setCheckout] = useState<CheckoutDetails>({
     recipientName: contactName,
@@ -194,7 +208,8 @@ export function PharmacyCart({ products, cart, onAdd, onRemove, onSubmit, pharma
     note: "",
   })
   const rows = cart.map((line) => ({ line, product: products.find((item) => item.id === line.productId) })).filter((item): item is { line: CartLine; product: Product } => Boolean(item.product))
-  const total = rows.reduce((sum, item) => sum + item.product.price * item.line.quantity, 0)
+  const pricing = cartPricing(cart, products, offers)
+  const total = pricing.total
 
   function updateCheckout<K extends keyof CheckoutDetails>(key: K, value: CheckoutDetails[K]) {
     setCheckout((current) => ({ ...current, [key]: value }))
@@ -212,12 +227,12 @@ export function PharmacyCart({ products, cart, onAdd, onRemove, onSubmit, pharma
         <SectionCard title="الأصناف المختارة" description="يمكنك تعديل الكمية قبل إرسال الطلب.">
           {rows.length === 0 ? <div className="cart-empty"><span className="empty-icon"><ShoppingBag aria-hidden="true" /></span><strong>السلة فارغة</strong><p>أضف منتجات من كتالوج الشركة لتكوين طلب.</p></div> : <div className="cart-items">{rows.map(({ line, product }) => {
             const available = Math.max(product.stock - product.reserved, 0)
-            return <article className="cart-item" key={product.id}><span className="product-mini-icon"><Package aria-hidden="true" /></span><div className="cart-product-copy"><strong>{product.name}</strong><small>{product.pack}</small><span>{formatCurrency(product.price)} للوحدة</span></div><div className="quantity-control"><button type="button" onClick={() => onRemove(product.id)} aria-label={`تقليل كمية ${product.name}`}><Minus aria-hidden="true" /></button><span aria-live="polite">{line.quantity}</span><button type="button" onClick={() => onAdd(product.id)} disabled={line.quantity >= available} aria-label={`زيادة كمية ${product.name}`}><Plus aria-hidden="true" /></button></div><strong className="cart-line-total">{formatCurrency(product.price * line.quantity)}</strong></article>
+            return <article className="cart-item" key={product.id}><span className="product-mini-icon"><Package aria-hidden="true" /></span><div className="cart-product-copy"><strong>{product.name}</strong><small>{product.pack}</small><span>{formatCurrency(pricing.prices[product.id] ?? product.price)} للوحدة{pricing.prices[product.id] !== undefined && pricing.prices[product.id]! < product.price ? " بعد الخصم" : ""}</span></div><div className="quantity-control"><button type="button" onClick={() => onRemove(product.id)} aria-label={`تقليل كمية ${product.name}`}><Minus aria-hidden="true" /></button><span aria-live="polite">{line.quantity}</span><button type="button" onClick={() => onAdd(product.id)} disabled={line.quantity >= available} aria-label={`زيادة كمية ${product.name}`}><Plus aria-hidden="true" /></button></div><strong className="cart-line-total">{formatCurrency((pricing.prices[product.id] ?? product.price) * line.quantity)}</strong></article>
           })}</div>}
         </SectionCard>
         <form className="checkout-card" onSubmit={handleSubmit}>
           <div className="checkout-heading"><span><ShoppingBag aria-hidden="true" /></span><div><strong>تفاصيل الطلب والتسليم</strong><small>{pharmacyName}</small></div></div>
-          <div className="checkout-lines"><div><span>عدد الأصناف</span><strong>{rows.length}</strong></div><div><span>إجمالي الوحدات</span><strong>{rows.reduce((sum, row) => sum + row.line.quantity, 0)}</strong></div></div>
+          <div className="checkout-lines"><div><span>عدد الأصناف</span><strong>{rows.length}</strong></div><div><span>إجمالي الوحدات</span><strong>{rows.reduce((sum, row) => sum + row.line.quantity, 0)}</strong></div><div><span>الإجمالي قبل العروض</span><strong>{formatCurrency(pricing.subtotal)}</strong></div>{pricing.savings > 0 && <div className="checkout-savings"><span>وفّرت من العروض</span><strong>- {formatCurrency(pricing.savings)}</strong></div>}</div>
           <div className="checkout-total"><span>الإجمالي التقديري</span><strong>{formatCurrency(total)}</strong></div>
           <div className="checkout-fields">
             <label className="checkout-field">اسم المستلم<input required autoComplete="name" maxLength={80} value={checkout.recipientName} onChange={(event) => updateCheckout("recipientName", event.target.value)} /></label>
