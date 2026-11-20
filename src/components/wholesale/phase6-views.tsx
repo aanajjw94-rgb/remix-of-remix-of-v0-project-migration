@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { BellRing, Check, MapPin, Plus, ShieldCheck, Trash2 } from "lucide-react"
 import { toast } from "sonner"
-import { EmptyState, MetricCard, SectionCard, SectionHeading, StatusPill, formatCurrency } from "./shared"
+import { EmptyState, SectionCard, SectionHeading, StatusPill, formatCurrency } from "./shared"
 import type { DeliveryAgent, Order, Product } from "./types"
 import { adjustedStock, custodyShortfall, netProfit, stockVariance, treasuryBalance, verifyTotp, type Expense, type StockCount, type Voucher } from "./phase6-logic"
 
@@ -139,7 +139,7 @@ export function TreasuryView({ vouchers, opening, onAdd }: { vouchers: Voucher[]
   const payments = vouchers.filter(v => v.type === "payment").reduce((s, v) => s + v.amount, 0)
   return <div className="view-stack">
     <SectionHeading eyebrow="المالية" title="الخزينة والمقبوضات" description="سندات القبض والصرف اليومية ورصيد الخزينة." />
-    <div className="stat-grid"><MetricCard label="الرصيد الافتتاحي" value={formatCurrency(opening)} /><MetricCard label="المقبوضات" value={formatCurrency(receipts)} /><MetricCard label="المصروفات" value={formatCurrency(payments)} /><MetricCard label="رصيد الخزينة" value={formatCurrency(treasuryBalance(opening, vouchers))} /></div>
+    <div className="summary-strip"><Stat label="الرصيد الافتتاحي" value={formatCurrency(opening)} /><Stat label="المقبوضات" value={formatCurrency(receipts)} /><Stat label="المصروفات" value={formatCurrency(payments)} /><Stat label="رصيد الخزينة" value={formatCurrency(treasuryBalance(opening, vouchers))} /></div>
     <SectionCard title="سند جديد"><form className="p6-form" onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); const amount = Number(f.get("amount")); if (!(amount > 0)) { toast.error("أدخل مبلغًا صحيحًا"); return } onAdd({ id: `V-${Date.now()}`, type: f.get("type") as Voucher["type"], amount, party: String(f.get("party") ?? ""), note: String(f.get("note") ?? ""), date: today }); e.currentTarget.reset(); toast.success("تم تسجيل السند") }}><select name="type" aria-label="نوع السند"><option value="receipt">سند قبض</option><option value="payment">سند صرف</option></select><input name="amount" type="number" step="0.01" placeholder="المبلغ" aria-label="المبلغ" required /><input name="party" placeholder="الجهة" aria-label="الجهة" required /><input name="note" placeholder="البيان" aria-label="البيان" /><button className="primary-button"><Plus /> تسجيل</button></form></SectionCard>
     <SectionCard title="حركة اليوم"><div className="table-wrap"><table className="data-table"><thead><tr><th>رقم السند</th><th>النوع</th><th>الجهة</th><th>البيان</th><th>المبلغ</th></tr></thead><tbody>{vouchers.map(v => <tr key={v.id}><td>{v.id}</td><td><StatusPill tone={v.type === "receipt" ? "green" : "red"}>{v.type === "receipt" ? "قبض" : "صرف"}</StatusPill></td><td>{v.party}</td><td>{v.note}</td><td>{formatCurrency(v.amount)}</td></tr>)}</tbody></table></div></SectionCard>
   </div>
@@ -153,7 +153,7 @@ export function ExpensesView({ expenses, revenue, onAdd }: { expenses: Expense[]
   const max = Math.max(1, ...byCat.map(b => b.total))
   return <div className="view-stack">
     <SectionHeading eyebrow="المالية" title="المصروفات التشغيلية" description="تسجيل المصروفات لحساب صافي الربح الحقيقي." />
-    <div className="stat-grid"><MetricCard label="الإيرادات" value={formatCurrency(revenue)} /><MetricCard label="تكلفة البضاعة" value={formatCurrency(cogs)} /><MetricCard label="المصروفات" value={formatCurrency(expenses.reduce((s, e) => s + e.amount, 0))} /><MetricCard label="صافي الربح" value={formatCurrency(netProfit(revenue, cogs, expenses))} /></div>
+    <div className="summary-strip"><Stat label="الإيرادات" value={formatCurrency(revenue)} /><Stat label="تكلفة البضاعة" value={formatCurrency(cogs)} /><Stat label="المصروفات" value={formatCurrency(expenses.reduce((s, e) => s + e.amount, 0))} /><Stat label="صافي الربح" value={formatCurrency(netProfit(revenue, cogs, expenses))} /></div>
     <div className="p6-grid">
       <SectionCard title="مصروف جديد"><form className="p6-form" onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); const amount = Number(f.get("amount")); if (!(amount > 0)) { toast.error("أدخل مبلغًا صحيحًا"); return } onAdd({ id: `EX-${Date.now()}`, category: String(f.get("category")), amount, note: String(f.get("note") ?? ""), date: today }); e.currentTarget.reset(); toast.success("تم تسجيل المصروف") }}><select name="category" aria-label="البند">{categories.map(c => <option key={c}>{c}</option>)}</select><input name="amount" type="number" step="0.01" placeholder="المبلغ" aria-label="المبلغ" required /><input name="note" placeholder="الوصف" aria-label="الوصف" /><button className="primary-button"><Plus /> إضافة</button></form></SectionCard>
       <SectionCard title="حسب البند"><ul className="p6-bars">{byCat.map(b => <li key={b.c}><span>{b.c}</span><i style={{ width: `${(b.total / max) * 100}%` }} /><b>{formatCurrency(b.total)}</b></li>)}</ul></SectionCard>
@@ -172,3 +172,4 @@ export const demoExpenses: Expense[] = [
   { id: "EX-3", category: "صيانة", amount: 1100, note: "صيانة سيارة 3", date: today },
 ]
 export { adjustedStock }
+function Stat({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div> }
