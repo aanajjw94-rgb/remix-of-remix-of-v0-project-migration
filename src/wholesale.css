@@ -1,3 +1,4 @@
+@import "./styles/phase6.css";
 /* Application styles carried over from the original platform (plain CSS classes, RTL). */
 * { box-sizing: border-box; }
 html { min-width: 320px; scroll-behavior: smooth; }
