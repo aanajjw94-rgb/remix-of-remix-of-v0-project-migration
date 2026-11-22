@@ -26,6 +26,9 @@ export type Product = {
   expiry: string
   code: string
   tag?: string | undefined
+  location?: string | undefined
+  costPrice?: number | undefined
+  packageType?: string | undefined
 }
 
 export type OrderItem = {

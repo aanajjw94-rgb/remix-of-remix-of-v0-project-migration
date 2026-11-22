@@ -25,6 +25,15 @@ import {
   LayoutDashboard,
   Package,
   Settings,
+  ShieldCheck,
+  ClipboardCheck,
+  Radio,
+  ShoppingCart,
+  Bike,
+  MapPinned,
+  Wallet,
+  Landmark,
+  Receipt,
   Store,
   Tag,
   Truck,
@@ -56,10 +65,12 @@ import { DEMO_NOW, createDemoBatches, demoActivity, demoActorNames, demoCreditPr
 import { applyCreditNote, returnAmount } from "./ops-logic"
 import { cartPricing, catalogOffers } from "./portal-logic"
 import { Modal } from "./modal"
+import { CustodyView, ExpensesView, FleetView, LiveMapView, LiveOrdersView, PosView, SecurityView, StockTakeView, TreasuryView, demoExpenses, demoVouchers } from "./phase6-views"
+import { adjustedStock, type Expense, type StockCount, type Voucher } from "./phase6-logic"
 import type { CartLine, CheckoutDetails, DeliveryEvidence, DeliveryStatus, Invoice, Order, Pharmacy, Product } from "./types"
 
 export type DemoRole = "owner" | "inventory" | "orders" | "dispatcher" | "driver" | "pharmacy"
-type Tab = "overview" | "archive" | "orders" | "inventory" | "pharmacies" | "deliveries" | "invoices" | "reports" | "team" | "branches" | "offers" | "settings" | "expiry" | "returns" | "suppliers" | "credit" | "integrations" | "activity" | "assistant" | "home" | "catalog" | "cart" | "favorites" | "tracking" | "support" | "statement" | "account"
+type Tab = "overview" | "archive" | "orders" | "inventory" | "pharmacies" | "deliveries" | "invoices" | "reports" | "team" | "branches" | "offers" | "settings" | "expiry" | "returns" | "suppliers" | "credit" | "integrations" | "activity" | "assistant" | "security" | "stocktake" | "live" | "pos" | "fleet" | "livemap" | "custody" | "treasury" | "expenses" | "home" | "catalog" | "cart" | "favorites" | "tracking" | "support" | "statement" | "account"
 type InitialRole = "company" | "driver" | "pharmacy"
 type Props = { initialRole: InitialRole; initialDemoRole?: DemoRole; startTour?: boolean | undefined }
 
@@ -71,16 +82,25 @@ const companyNavigation: NavItem[] = [
   { id: "inventory", label: "المخزون", icon: Boxes, group: "التشغيل" },
   { id: "expiry", label: "الصلاحية والتشغيلات", icon: CalendarClock, badge: "جديد", group: "التشغيل" },
   { id: "suppliers", label: "الموردون والمشتريات", icon: Factory, badge: "جديد", group: "التشغيل" },
+  { id: "stocktake", label: "جرد المخزون", icon: ClipboardCheck, badge: "جديد", group: "المخزون" },
+  { id: "live", label: "الطلبات الحية", icon: Radio, badge: "جديد", group: "المبيعات" },
+  { id: "pos", label: "البيع المباشر", icon: ShoppingCart, badge: "جديد", group: "المبيعات" },
   { id: "deliveries", label: "التوصيل", icon: Truck, group: "التشغيل" },
+  { id: "fleet", label: "أسطول المناديب", icon: Bike, badge: "جديد", group: "التوصيل" },
+  { id: "livemap", label: "التتبع اللحظي", icon: MapPinned, badge: "جديد", group: "التوصيل" },
+  { id: "custody", label: "تسوية العهد", icon: Wallet, badge: "جديد", group: "التوصيل" },
   { id: "returns", label: "المرتجعات", icon: RotateCcw, badge: "جديد", group: "التشغيل" },
   { id: "pharmacies", label: "الصيدليات", icon: Store, group: "العملاء والمالية" },
   { id: "invoices", label: "الفواتير والتحصيل", icon: FileText, group: "العملاء والمالية" },
   { id: "credit", label: "الحدود الائتمانية", icon: CreditCard, badge: "جديد", group: "العملاء والمالية" },
   { id: "offers", label: "العروض التجارية", icon: Tag, group: "العملاء والمالية" },
+  { id: "treasury", label: "الخزينة", icon: Landmark, badge: "جديد", group: "المالية" },
+  { id: "expenses", label: "المصروفات التشغيلية", icon: Receipt, badge: "جديد", group: "المالية" },
   { id: "reports", label: "التقارير", icon: BarChart3, group: "التحليل" },
   { id: "assistant", label: "المساعد الذكي", icon: Bot, badge: "جديد", group: "التحليل" },
   { id: "archive", label: "الأرشيف", icon: Archive, group: "التحليل" },
   { id: "activity", label: "سجل النشاط", icon: History, group: "التحليل" },
+  { id: "security", label: "الأمان والتحقق الثنائي", icon: ShieldCheck, badge: "جديد", group: "الأمان" },
   { id: "team", label: "الفريق والصلاحيات", icon: Users, group: "الإدارة" },
   { id: "branches", label: "الفروع والتغطية", icon: Building2, group: "الإدارة" },
   { id: "integrations", label: "التكاملات", icon: Plug, badge: "جديد", group: "الإدارة" },
@@ -104,9 +124,9 @@ const pharmacyMobilePrimary: Tab[] = ["home", "catalog", "cart", "tracking"]
 
 const roleNavigation: Record<DemoRole, Tab[]> = {
   owner: companyNavigation.map((item) => item.id),
-  inventory: ["overview", "inventory", "expiry", "suppliers", "returns", "assistant", "branches"],
-  orders: ["overview", "orders", "returns", "pharmacies", "invoices", "credit", "reports", "assistant", "archive"],
-  dispatcher: ["overview", "orders", "deliveries", "branches"],
+  inventory: ["overview", "inventory", "expiry", "suppliers", "returns", "stocktake", "assistant", "branches"],
+  orders: ["overview", "orders", "returns", "pharmacies", "invoices", "credit", "reports", "live", "pos", "assistant", "archive"],
+  dispatcher: ["overview", "orders", "deliveries", "fleet", "livemap", "custody", "branches"],
   driver: ["deliveries"],
   pharmacy: ["home", "catalog", "cart", "favorites", "orders", "tracking", "invoices", "statement", "support", "account"],
 }
@@ -139,6 +159,15 @@ const pageCopy: Record<Tab, { title: string; subtitle: string }> = {
   credit: { title: "الحدود الائتمانية والتحصيل", subtitle: "أعمار الديون وتذكيرات السداد لكل صيدلية" },
   integrations: { title: "التكاملات", subtitle: "الربط مع الخدمات الحكومية والتواصل والمحاسبة" },
   activity: { title: "سجل النشاط", subtitle: "من غيّر ماذا ومتى داخل مساحة الشركة" },
+  security: { title: "الأمان", subtitle: "التحقق الثنائي والجلسات النشطة" },
+  stocktake: { title: "جرد المخزون", subtitle: "الكمية الفعلية والفروقات والتالف" },
+  live: { title: "الطلبات الحية", subtitle: "طلبات تصل لحظيًا مع تنبيه صوتي" },
+  pos: { title: "البيع المباشر", subtitle: "فاتورة يدوية تخصم من المخزون" },
+  fleet: { title: "أسطول المناديب", subtitle: "بيانات وحالة كل مندوب" },
+  livemap: { title: "التتبع اللحظي", subtitle: "مواقع المناديب والطلبات" },
+  custody: { title: "تسوية العهد", subtitle: "النقد المحصّل مع المناديب وإيداعه" },
+  treasury: { title: "الخزينة", subtitle: "سندات القبض والصرف والرصيد" },
+  expenses: { title: "المصروفات التشغيلية", subtitle: "المصروفات وصافي الربح" },
   assistant: { title: "المساعد الذكي", subtitle: "اقتراحات مبنية على بيانات الطلبات والمخزون" },
   home: { title: "الرئيسية", subtitle: "ملخص حساب الصيدلية" },
   catalog: { title: "كتالوج المنتجات", subtitle: "تصفح المنتجات وأضف احتياجاتك إلى السلة" },
@@ -174,6 +203,8 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
   const [favorites, setFavorites] = useState<string[]>(["MED-1042", "MED-1050"])
   const [reorderLists, setReorderLists] = useState<ReorderList[]>([{ id: "LIST-1", name: "طلب الأسبوع", lines: [{ productId: "MED-1042", quantity: 6 }, { productId: "MED-1086", quantity: 2 }] }])
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const [vouchers, setVouchers] = useState<Voucher[]>(demoVouchers)
+  const [expenses, setExpenses] = useState<Expense[]>(demoExpenses)
 
   const isCompany = !["driver", "pharmacy"].includes(activeRole)
   const isPharmacy = activeRole === "pharmacy"
@@ -512,6 +543,22 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     setFeedback("")
   }
 
+  function applyStockTake(counts: StockCount[]) {
+    setProducts((current) => current.map((product) => { const c = counts.find((x) => x.productId === product.id); return c ? { ...product, stock: Math.max(product.reserved, adjustedStock(c)) } : product }))
+    log("جرد المخزون", "اعتمد تسوية الجرد")
+  }
+
+  function posSell(lines: { productId: string; quantity: number }[], customer: string, total: number) {
+    setProducts((current) => current.map((product) => { const l = lines.find((x) => x.productId === product.id); return l ? { ...product, stock: product.stock - l.quantity } : product }))
+    setVouchers((c) => [{ id: `V-${Date.now()}`, type: "receipt", amount: total, party: customer, note: "بيع مباشر", date: new Date().toISOString().slice(0, 10) }, ...c])
+    log("البيع المباشر", `فاتورة مباشرة لـ ${customer} بقيمة ${total}`)
+  }
+
+  function custodyDeposit(agent: string, amount: number) {
+    setVouchers((c) => [{ id: `V-${Date.now()}`, type: "receipt", amount, party: agent, note: "إيداع عهدة مندوب", date: new Date().toISOString().slice(0, 10) }, ...c])
+    log("تسوية العهد", `أغلق عهدة ${agent} وأودع ${amount}`)
+  }
+
   function renderCompanyContent() {
     if (tab === "overview") return <CompanyDashboard orders={orders} products={products} pharmacies={pharmacies} onNavigate={setTab} />
     if (tab === "orders") return <OrdersView orders={orders} onAdvance={advanceOrder} onReject={rejectOrder} />
@@ -529,6 +576,15 @@ export function WholesaleApp({ initialRole, initialDemoRole }: Props) {
     if (tab === "suppliers") return <SuppliersView suppliers={suppliers} purchaseOrders={purchaseOrders} products={products} onCreate={createPurchaseOrders} onReceive={receivePurchaseOrder} onAddSupplier={addSupplier} />
     if (tab === "credit") return <CreditView pharmacies={pharmacies} profiles={creditProfiles} orders={allOrders} onUpdate={updateCredit} onRemind={sendReminder} />
     if (tab === "integrations") return <IntegrationsView integrations={integrations} onConnect={(id) => setIntegration(id, true)} onDisconnect={(id) => setIntegration(id, false)} />
+    if (tab === "security") return <SecurityView onLog={(text) => log("الأمان", text)} />
+    if (tab === "stocktake") return <StockTakeView products={products} onApply={applyStockTake} />
+    if (tab === "live") return <LiveOrdersView onLog={(text) => log("الطلبات الحية", text)} />
+    if (tab === "pos") return <PosView products={products} onSell={posSell} />
+    if (tab === "fleet") return <FleetView agents={demoDeliveryAgents} orders={orders} />
+    if (tab === "livemap") return <LiveMapView agents={demoDeliveryAgents} orders={orders} />
+    if (tab === "custody") return <CustodyView agents={demoDeliveryAgents} orders={orders} onDeposit={custodyDeposit} />
+    if (tab === "treasury") return <TreasuryView vouchers={vouchers} opening={25000} onAdd={(v) => { setVouchers((c) => [v, ...c]); log("الخزينة", `سجل ${v.type === "receipt" ? "سند قبض" : "سند صرف"} ${v.amount}`) }} />
+    if (tab === "expenses") return <ExpensesView expenses={expenses} revenue={invoices.reduce((t, i) => t + i.total, 0)} onAdd={(e) => { setExpenses((c) => [e, ...c]); log("المصروفات", `أضاف مصروف ${e.category} ${e.amount}`) }} />
     if (tab === "activity") return <ActivityView entries={activity} />
     if (tab === "assistant") return <AssistantView products={products} orders={allOrders} batches={batches} pharmacies={pharmacies} onNavigate={setTab} />
     return <SettingsView />

@@ -14,6 +14,9 @@ export function ProductEditorModal({ product, onClose, onSave }: { product?: Pro
     stock: product ? String(product.stock) : "0",
     expiry: product?.expiry ?? "",
     code: product?.code ?? "",
+    location: product?.location ?? "",
+    costPrice: product?.costPrice ? String(product.costPrice) : "",
+    packageType: product?.packageType ?? "علبة",
   }))
 
   function submitProduct(event: FormEvent<HTMLFormElement>) {
@@ -36,6 +39,9 @@ export function ProductEditorModal({ product, onClose, onSave }: { product?: Pro
       expiry: form.expiry,
       code: form.code.trim(),
       tag: product?.tag,
+      location: form.location.trim() || undefined,
+      costPrice: Number(form.costPrice) > 0 ? Number(form.costPrice) : undefined,
+      packageType: form.packageType,
     })
   }
 
@@ -54,7 +60,10 @@ export function ProductEditorModal({ product, onClose, onSave }: { product?: Pro
             <label className="field-label">التصنيف<input required maxLength={60} value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} /></label>
             <label className="field-label">حجم العبوة<input required maxLength={60} value={form.pack} onChange={(event) => setForm((current) => ({ ...current, pack: event.target.value }))} /></label>
             <label className="field-label">الباركود<input required maxLength={64} dir="ltr" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></label>
-            <label className="field-label">سعر الجملة (ر.س)<input required type="number" min="0.01" step="0.01" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} /></label>
+            <label className="field-label">سعر البيع (ر.س)<input required type="number" min="0.01" step="0.01" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} /></label>
+            <label className="field-label">سعر الشراء (ر.س)<input type="number" min="0" step="0.01" value={form.costPrice} onChange={(event) => setForm((current) => ({ ...current, costPrice: event.target.value }))} /></label>
+            <label className="field-label">نوع العبوة<select value={form.packageType} onChange={(event) => setForm((current) => ({ ...current, packageType: event.target.value }))}>{["علبة", "كرتون", "شريط", "زجاجة", "أنبوب", "قطعة"].map((t) => <option key={t}>{t}</option>)}</select></label>
+            <label className="field-label">الموقع (الرواق/الرف)<input maxLength={60} placeholder="الرواق A · رف 2" value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} /></label>
             <label className="field-label">رصيد المخزون<input required type="number" min={product?.reserved ?? 0} step="1" value={form.stock} onChange={(event) => setForm((current) => ({ ...current, stock: event.target.value }))} /></label>
             <label className="field-label">تاريخ الصلاحية<input required type="text" inputMode="numeric" pattern="[0-9]{4}-(0[1-9]|1[0-2])" maxLength={7} placeholder="2027-12" value={form.expiry} onChange={(event) => setForm((current) => ({ ...current, expiry: event.target.value }))} /></label>
           </div>
